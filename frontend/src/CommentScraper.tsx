@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ANALYTICS_URL,
   BACKEND_URL,
+  analyticsLinkFor,
   formatBytes,
   loadRecentScrapes,
   normalizeClientSlug,
@@ -27,6 +29,15 @@ const LOG_ROTATION = [
   "> still working — large threads take a little longer…",
   "> almost there…",
 ];
+
+const YOUTUBE_URL_RE =
+  /^(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)[a-zA-Z0-9_-]{11}/;
+
+function isLikelyYouTubeUrl(raw: string): boolean {
+  const trimmed = raw.trim();
+  if (/^[a-zA-Z0-9_-]{11}$/.test(trimmed)) return true;
+  return YOUTUBE_URL_RE.test(trimmed);
+}
 
 function initials(name: string | undefined): string {
   if (!name) return "??";
@@ -75,12 +86,18 @@ export default function CommentScraper({
   onSendToAnalyzer,
   onGoToAnalyzerStandalone,
 }: CommentScraperProps) {
-  const [url, setUrl] = useState("");
-  const [clientSlug, setClientSlug] = useState("");
+  const [url, setUrl] = useState(
+    () => new URLSearchParams(window.location.search).get("url") || ""
+  );
+  const [clientSlug, setClientSlug] = useState(
+    () => new URLSearchParams(window.location.search).get("client_slug") || ""
+  );
   const [status, setStatus] = useState<Status>("idle");
   const [result, setResult] = useState<ScrapeResult | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
+  const [urlInvalid, setUrlInvalid] = useState(false);
   const [recent, setRecent] = useState<RecentScrape[]>(() => loadRecentScrapes());
+  const [reportCopied, setReportCopied] = useState(false);
 
   const [stepIndex, setStepIndex] = useState(0);
   const [elapsedSec, setElapsedSec] = useState(0);
@@ -99,6 +116,11 @@ export default function CommentScraper({
 
   const run = async () => {
     if (!url.trim()) return;
+    if (!isLikelyYouTubeUrl(url)) {
+      setUrlInvalid(true);
+      return;
+    }
+    setUrlInvalid(false);
     clearTimers();
     setStatus("loading");
     setErrorMsg("");
@@ -179,10 +201,23 @@ export default function CommentScraper({
       );
     } catch (e) {
       clearTimers();
-      setErrorMsg(
-        e instanceof Error ? e.message : "Could not reach the server. Is it running?"
-      );
+      const msg = e instanceof Error ? e.message : "Could not reach the server. Is it running?";
+      setErrorMsg(msg);
+      setLogLines((lines) => [...lines, `> error · ${msg}`]);
       setStatus("error");
+    }
+  };
+
+  const retry = () => run();
+
+  const reportIssue = async () => {
+    const report = `URL: ${url}\nError: ${errorMsg}\nTime: ${new Date().toISOString()}`;
+    try {
+      await navigator.clipboard.writeText(report);
+      setReportCopied(true);
+      setTimeout(() => setReportCopied(false), 1600);
+    } catch {
+      // Clipboard API unavailable — nothing else to fall back to here.
     }
   };
 
@@ -282,6 +317,7 @@ export default function CommentScraper({
     setStatus("idle");
     setResult(null);
     setErrorMsg("");
+    setUrlInvalid(false);
   };
 
   const labelClass = "font-[600] text-[10px] tracking-[.2em] uppercase text-[#5b6573]";
@@ -305,6 +341,8 @@ export default function CommentScraper({
                 ? "threadline — scraping…"
                 : status === "done"
                 ? "threadline — done"
+                : status === "error"
+                ? "threadline — error"
                 : "threadline — ~/scrape"}
             </span>
           </div>
@@ -334,13 +372,20 @@ export default function CommentScraper({
                   Threaded comments, replies &amp; metadata → one clean JSON.
                 </p>
 
-                <div className="flex gap-[10px] mb-4">
-                  <div className={`flex-1 flex items-center gap-2 h-[50px] px-[14px] ${monoField}`}>
-                    <span className="text-[#4f5a6a] text-sm">▸</span>
+                <div className={`flex gap-[10px] ${urlInvalid ? "mb-2" : "mb-4"}`}>
+                  <div
+                    className={`flex-1 flex items-center gap-2 h-[50px] px-[14px] ${monoField} ${
+                      urlInvalid ? "!border-[#ff6b5e]" : ""
+                    }`}
+                  >
+                    <span className={`text-sm ${urlInvalid ? "text-[#ff6b5e]" : "text-[#4f5a6a]"}`}>▸</span>
                     <input
                       type="text"
                       value={url}
-                      onChange={(e) => setUrl(e.target.value)}
+                      onChange={(e) => {
+                        setUrl(e.target.value);
+                        setUrlInvalid(false);
+                      }}
                       onKeyDown={(e) => e.key === "Enter" && run()}
                       placeholder="youtube.com/watch?v=…"
                       className="flex-1 bg-transparent outline-none text-sm placeholder:text-[#4f5a6a]"
@@ -354,6 +399,11 @@ export default function CommentScraper({
                     Scrape ↵
                   </button>
                 </div>
+                {urlInvalid && (
+                  <p className="m-0 mb-4 font-['JetBrains_Mono'] text-xs text-[#ff6b5e]">
+                    That doesn't look like a YouTube video URL.
+                  </p>
+                )}
 
                 <div className="flex flex-wrap gap-2 mb-6">
                   {["youtube.com", "youtu.be", "/shorts", "/live"].map((chip) => (
@@ -469,18 +519,66 @@ export default function CommentScraper({
 
             {status === "error" && (
               <>
-                <h1 className="m-0 mb-[10px] font-semibold text-[28px] leading-[1.04] tracking-[-0.02em]">
-                  Couldn't scrape that
-                </h1>
-                <div className="bg-[#150a0b] border border-[#3a1f22] rounded-[10px] p-4 mb-6">
-                  <p className="font-['JetBrains_Mono'] text-sm text-[#ff9d92] m-0">{errorMsg}</p>
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="w-[40px] h-[40px] shrink-0 rounded-[11px] bg-[#ff6b5e]/[0.12] text-[#ff6b5e] flex items-center justify-center font-bold text-xl">
+                    !
+                  </span>
+                  <span className="inline-flex items-center gap-[7px] px-[11px] py-[5px] rounded-full bg-[#ff6b5e]/[0.1] text-[#ff6b5e] font-['JetBrains_Mono'] font-bold text-[11px] tracking-[.1em]">
+                    SCRAPE FAILED
+                  </span>
                 </div>
+                <h1 className="m-0 mb-[10px] font-semibold text-[28px] leading-[1.1] tracking-[-0.02em]">
+                  Couldn't scrape that link
+                </h1>
+                <p className="m-0 mb-[22px] font-['JetBrains_Mono'] text-sm leading-[1.55] text-[#7b8698]">
+                  {errorMsg}
+                </p>
+
+                <div className="flex items-center gap-2 h-[46px] px-[14px] mb-[14px] bg-[#0A0D12] border border-[#2c3540] rounded-[10px]">
+                  <span className="text-[#4f5a6a] text-sm">▸</span>
+                  <span className="font-['JetBrains_Mono'] text-[13px] text-[#8b95a4] truncate">{url}</span>
+                </div>
+                <div className="bg-[#080b0f] border border-[#151b23] rounded-[10px] px-4 py-[14px] mb-[26px] font-['JetBrains_Mono'] text-xs leading-[1.7]">
+                  {logLines.map((line, i) => (
+                    <div key={i} className={i === logLines.length - 1 ? "text-[#ff6b5e]" : "text-[#697483]"}>
+                      {line}
+                    </div>
+                  ))}
+                </div>
+
+                <div className={`${labelClass} mb-[14px]`}>Common causes</div>
+                <div className="flex flex-col gap-[11px] mb-7 font-['JetBrains_Mono'] text-[13px] text-[#9aa4b3]">
+                  <div className="flex gap-[10px]">
+                    <span className="text-[#5b6573]">·</span> Comments disabled by the uploader
+                  </div>
+                  <div className="flex gap-[10px]">
+                    <span className="text-[#5b6573]">·</span> Video is private, unlisted, or age-restricted
+                  </div>
+                  <div className="flex gap-[10px]">
+                    <span className="text-[#5b6573]">·</span> Link is a channel or playlist, not a video
+                  </div>
+                </div>
+
                 <button
                   onClick={reset}
-                  className="w-full h-[50px] rounded-[10px] bg-[#B8F24A] text-[#0E1218] font-bold text-sm"
+                  className="w-full h-[52px] rounded-[11px] bg-[#B8F24A] text-[#0E1218] font-bold text-[15px] mb-3"
                 >
-                  Try again
+                  Try another link
                 </button>
+                <div className="flex gap-[10px]">
+                  <button
+                    onClick={retry}
+                    className="flex-1 h-[44px] border border-[#2c3540] rounded-[10px] text-[#aab3c0] font-['JetBrains_Mono'] font-semibold text-[13px]"
+                  >
+                    Retry
+                  </button>
+                  <button
+                    onClick={reportIssue}
+                    className="flex-1 h-[44px] border border-[#2c3540] rounded-[10px] text-[#aab3c0] font-['JetBrains_Mono'] font-semibold text-[13px]"
+                  >
+                    {reportCopied ? "Copied ✓" : "Report issue"}
+                  </button>
+                </div>
               </>
             )}
 
@@ -632,6 +730,16 @@ export default function CommentScraper({
                   >
                     Send to Sentiment Analyzer →
                   </button>
+                  {ANALYTICS_URL && (
+                    <a
+                      href={analyticsLinkFor(result.provenance?.client_slug)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="w-full block text-center mt-2 font-['JetBrains_Mono'] text-xs text-[#697483] hover:text-[#B8F24A]"
+                    >
+                      View {result.provenance?.client_slug || "channel"} performance analytics →
+                    </a>
+                  )}
                 </>
               );
             })()}

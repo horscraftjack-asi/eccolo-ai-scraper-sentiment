@@ -64,10 +64,28 @@ Create **two separate services** in the same Railway project, both pointing at t
 
 ### 2. Frontend service
 - **Root Directory:** `frontend`
-- **Variables:** `VITE_BACKEND_URL = https://<your-backend-url>` (no trailing slash)
-  - ⚠️ This is read at **build time** — set it before the build, and redeploy if it changes.
+- **Variables:** `VITE_BACKEND_URL = https://<your-backend-url>` (no trailing slash);
+  `VITE_ANALYTICS_URL = https://<analytics-engine-url>` (optional — see below)
+  - ⚠️ Both are read at **build time** — set them before the build, and redeploy if they change.
 - Railway auto-detects Node via `package.json`, runs `npm run build`, then serves
   the static `dist/` with `serve` (see `frontend/Procfile`).
+
+## The flywheel cross-link to Analytics
+
+This app and `ziggurat-analytics-engine` are **separate repos, separate Railway deploys, separate
+URLs** — deliberately not merged (a bug in one shouldn't take the other down). They're tied together
+at the UI layer with plain links carrying context via query params, not a shared frontend:
+
+- **This app → Analytics:** once `VITE_ANALYTICS_URL` is set, a "View performance analytics →"
+  link appears after a scrape and after a sentiment run, opening
+  `<analytics-url>/?client=<slug>` in a new tab (preselects that client's dropdown there — silently
+  falls back to no preselection if the slug isn't recognised).
+- **Analytics → this app:** already built on the analytics-engine side (`SCRAPER_URL` env var) — it
+  opens `<this-app-url>/?url=<video-url>` for its top YouTube post. This app reads `?url=` (and
+  `?client_slug=`) on load and prefills the scrape form accordingly.
+
+Neither hop is required — unset either env var and that link just doesn't appear. Standalone use of
+either app is never broken by the other being down or unconfigured.
 
 ## Local development
 

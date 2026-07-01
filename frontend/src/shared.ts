@@ -12,6 +12,30 @@ function resolveBackendUrl(): string {
 export const BACKEND_URL = resolveBackendUrl();
 // ─────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────
+// The deployed Analytics Engine's URL, for the cross-app flywheel link.
+// Set VITE_ANALYTICS_URL in your environment (Railway → Variables). Unset ->
+// the link is simply hidden, since this is a separate app/deploy, not a
+// required dependency of the scraper.
+function resolveAnalyticsUrl(): string {
+  const raw = (import.meta.env.VITE_ANALYTICS_URL ?? "").trim();
+  if (!raw) return "";
+  const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  return withScheme.replace(/\/+$/, "");
+}
+
+export const ANALYTICS_URL = resolveAnalyticsUrl();
+
+// Builds the link to the Analytics Engine, preselecting a client if known.
+// Mirrors the ?url= convention analytics-engine already uses for its own
+// "Scrape top video" hop back into this app.
+export function analyticsLinkFor(clientSlug?: string | null): string {
+  if (!ANALYTICS_URL) return "";
+  const params = clientSlug ? `?client=${encodeURIComponent(clientSlug)}` : "";
+  return `${ANALYTICS_URL}/${params}`;
+}
+// ─────────────────────────────────────────────────────────────
+
 export interface Comment {
   comment_id: string;
   author?: string;

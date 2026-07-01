@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BACKEND_URL, normalizeClientSlug, type ScrapeResult } from "./shared";
+import {
+  ANALYTICS_URL,
+  BACKEND_URL,
+  analyticsLinkFor,
+  normalizeClientSlug,
+  type ScrapeResult,
+} from "./shared";
 
 type Status = "idle" | "loading" | "done" | "error";
 
@@ -40,6 +46,35 @@ interface AnalyzerProps {
 
 const STEP_LABELS = ["Ingest comments", "Assemble prompt", "Call model", "Validate report"];
 
+// contract §4 only gives a qualitative prominence (strong/moderate/weak), not a mention
+// count — the meter width is scaled from that tier rather than fabricating a number.
+const PROMINENCE_WIDTH: Record<string, number> = { strong: 100, moderate: 65, weak: 35 };
+const PROMINENCE_COLOR: Record<string, string> = {
+  strong: "#B8F24A", moderate: "#7fb83a", weak: "#3f5a2b",
+};
+
+const DIRECTION_LABEL: Record<string, string> = {
+  "course-development": "MODULE DIRECTION",
+  "content-ideation": "CONTENT DIRECTION",
+  "ip-development": "PRODUCT DIRECTION",
+  "qa-mining": "ANSWER DIRECTION",
+};
+
+interface Theme { name: string; prominence?: string; }
+interface QuestionCluster { name: string; }
+interface PainPoint { name: string; course_response?: string; }
+interface Gap { name: string; opportunity?: string; }
+
+function directionBullets(summary: Record<string, unknown>): string[] {
+  const painPoints = (summary.pain_points as PainPoint[] | undefined) ?? [];
+  const gaps = (summary.gaps as Gap[] | undefined) ?? [];
+  const bullets = [
+    ...painPoints.map((p) => p.course_response).filter(Boolean),
+    ...gaps.map((g) => g.opportunity).filter(Boolean),
+  ] as string[];
+  return bullets.slice(0, 3);
+}
+
 const LOG_ROTATION = [
   "> reading comments export…",
   "> assembling prompt…",
@@ -65,6 +100,7 @@ export default function Analyzer({ scrapeResult, onBack }: AnalyzerProps) {
   const [status, setStatus] = useState<Status>("idle");
   const [result, setResult] = useState<AnalyzeResult | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
+  const [directionCopied, setDirectionCopied] = useState(false);
 
   const [stepIndex, setStepIndex] = useState(0);
   const [elapsedSec, setElapsedSec] = useState(0);
@@ -223,7 +259,8 @@ export default function Analyzer({ scrapeResult, onBack }: AnalyzerProps) {
 
   const breadcrumb = useMemo(() => {
     if (status === "loading") return "threadline — analyzing…";
-    if (status === "done") return "threadline — done";
+    if (status === "done") return "threadline — ~/analyze · done";
+    if (status === "error") return "threadline — error";
     return "threadline — ~/analyze";
   }, [status]);
 
@@ -489,7 +526,15 @@ export default function Analyzer({ scrapeResult, onBack }: AnalyzerProps) {
 
             {status === "error" && (
               <>
-                <h1 className="m-0 mb-[10px] font-semibold text-[28px] leading-[1.04] tracking-[-0.02em]">
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="w-[40px] h-[40px] shrink-0 rounded-[11px] bg-[#ff6b5e]/[0.12] text-[#ff6b5e] flex items-center justify-center font-bold text-xl">
+                    !
+                  </span>
+                  <span className="inline-flex items-center gap-[7px] px-[11px] py-[5px] rounded-full bg-[#ff6b5e]/[0.1] text-[#ff6b5e] font-['JetBrains_Mono'] font-bold text-[11px] tracking-[.1em]">
+                    ANALYSIS FAILED
+                  </span>
+                </div>
+                <h1 className="m-0 mb-[10px] font-semibold text-[28px] leading-[1.1] tracking-[-0.02em]">
                   Couldn't analyze that
                 </h1>
                 <div className="bg-[#150a0b] border border-[#3a1f22] rounded-[10px] p-4 mb-6">
@@ -562,18 +607,46 @@ export default function Analyzer({ scrapeResult, onBack }: AnalyzerProps) {
               </>
             )}
 
-            {status === "done" && result?.status === "ok" && (
+            {status === "done" && result?.status === "ok" && (() => {
+              const summary = result.summary_json;
+              const purposeName =
+                purposes.find((p) => p.purpose_id === result.purpose)?.display_name || result.purpose;
+              const scopeName = scope === "per-video" ? "Per video" : "Synthesis";
+              const clientLabel = result.client_context_applied
+                ? result.client_slug_resolved
+                : "client-agnostic";
+              const rowsTotal = result.ingest_diagnostics?.rows_total;
+              const themes = (summary?.themes as Theme[] | undefined)?.slice(0, 4) ?? [];
+              const questions = (summary?.question_clusters as QuestionCluster[] | undefined)?.slice(0, 3) ?? [];
+              const direction = summary ? directionBullets(summary) : [];
+              const directionLabel = DIRECTION_LABEL[result.purpose as string] || "DIRECTION";
+
+              const copyDirection = async () => {
+                if (!direction.length) return;
+                try {
+                  await navigator.clipboard.writeText(direction.map((d) => `- ${d}`).join("\n"));
+                  setDirectionCopied(true);
+                  setTimeout(() => setDirectionCopied(false), 1600);
+                } catch {
+                  // Clipboard API unavailable — nothing else to fall back to here.
+                }
+              };
+
+              return (
               <>
-                <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center justify-between mb-2">
                   <span className="inline-flex items-center gap-[7px] px-[11px] py-[5px] rounded-full bg-[#B8F24A]/[0.12] text-[#B8F24A] font-['JetBrains_Mono'] font-bold text-[11px] tracking-[.1em]">
                     <span className="w-[6px] h-[6px] rounded-full bg-[#B8F24A]" />
-                    COMPLETE
+                    ANALYSIS COMPLETE
                   </span>
+                  {typeof rowsTotal === "number" && (
+                    <span className="font-['JetBrains_Mono'] text-xs text-[#697483]">
+                      {rowsTotal.toLocaleString()} comments
+                    </span>
+                  )}
                 </div>
                 <p className="font-['JetBrains_Mono'] text-[13px] text-[#8a94a4] mb-4">
-                  {result.client_context_applied
-                    ? `Client context applied (${result.client_slug_resolved}).`
-                    : "Run client-agnostic — no client_slug."}
+                  {[purposeName, scopeName, clientLabel].filter(Boolean).join(" · ")}
                 </p>
 
                 {result.truncated && (
@@ -616,10 +689,71 @@ export default function Analyzer({ scrapeResult, onBack }: AnalyzerProps) {
                   </div>
                 )}
 
-                <div className={`${labelClass} mb-2`}>Report</div>
-                <pre className="p-3 rounded-lg bg-[#080b0f] border border-[#151b23] overflow-auto max-h-96 whitespace-pre-wrap font-['JetBrains_Mono'] text-xs text-[#c3cad4] mb-4">
-                  {result.report_markdown}
-                </pre>
+                {themes.length > 0 && (
+                  <div className="mb-7">
+                    <div className={`${labelClass} mb-[14px]`}>Top themes</div>
+                    <div className="flex flex-col gap-[14px]">
+                      {themes.map((t) => {
+                        const tier = (t.prominence || "").toLowerCase();
+                        return (
+                          <div key={t.name}>
+                            <div className="flex justify-between mb-[6px]">
+                              <span className="text-[13px] text-[#d7dce3]">{t.name}</span>
+                              <span className="font-['JetBrains_Mono'] text-xs text-[#697483] uppercase">
+                                {tier || "—"}
+                              </span>
+                            </div>
+                            <div className="h-[6px] rounded-full bg-[#1a212b] overflow-hidden">
+                              <div
+                                className="h-full rounded-full"
+                                style={{
+                                  width: `${PROMINENCE_WIDTH[tier] ?? 50}%`,
+                                  background: PROMINENCE_COLOR[tier] ?? "#3f5a2b",
+                                }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {questions.length > 0 && (
+                  <div className="mb-7">
+                    <div className={`${labelClass} mb-[14px]`}>Questions the audience is asking</div>
+                    <div className="flex flex-col gap-[10px]">
+                      {questions.map((q, i) => (
+                        <div key={i} className="flex gap-[10px] items-start">
+                          <span className="font-['JetBrains_Mono'] font-semibold text-[13px] text-[#B8F24A]">?</span>
+                          <span className="text-[13px] leading-[1.4] text-[#c3cad4]">{q.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {direction.length > 0 && (
+                  <div className="bg-[#0A0D12] border border-[#1c232d] rounded-[12px] p-[18px] mb-6">
+                    <div className={`${labelClass} mb-[14px] text-[#B8F24A]`}>→ {directionLabel}</div>
+                    <div className="flex flex-col gap-[11px] text-[13px] leading-[1.5] text-[#c3cad4]">
+                      {direction.map((d, i) => (
+                        <div key={i} className="flex gap-[10px]">
+                          <span className="text-[#56d993]">›</span> {d}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <details className="mb-4">
+                  <summary className="cursor-pointer font-['JetBrains_Mono'] text-xs text-[#697483]">
+                    Full report
+                  </summary>
+                  <pre className="mt-2 p-3 rounded-lg bg-[#080b0f] border border-[#151b23] overflow-auto max-h-96 whitespace-pre-wrap font-['JetBrains_Mono'] text-xs text-[#c3cad4]">
+                    {result.report_markdown}
+                  </pre>
+                </details>
 
                 <button
                   onClick={downloadReport}
@@ -627,14 +761,35 @@ export default function Analyzer({ scrapeResult, onBack }: AnalyzerProps) {
                 >
                   ↓ Download report
                 </button>
-                <button
-                  onClick={reset}
-                  className="w-full h-[44px] border border-[#2c3540] rounded-[10px] text-[#aab3c0] font-['JetBrains_Mono'] font-semibold text-[13px]"
-                >
-                  Analyze another
-                </button>
+                <div className="flex gap-[10px]">
+                  {direction.length > 0 && (
+                    <button
+                      onClick={copyDirection}
+                      className="flex-1 h-[44px] border border-[#2c3540] rounded-[10px] text-[#aab3c0] font-['JetBrains_Mono'] font-semibold text-[13px]"
+                    >
+                      {directionCopied ? "Copied ✓" : "Copy direction"}
+                    </button>
+                  )}
+                  <button
+                    onClick={reset}
+                    className="flex-1 h-[44px] border border-[#2c3540] rounded-[10px] text-[#aab3c0] font-['JetBrains_Mono'] font-semibold text-[13px]"
+                  >
+                    Analyze another
+                  </button>
+                </div>
+                {ANALYTICS_URL && (
+                  <a
+                    href={analyticsLinkFor(result.client_slug_resolved)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-full block text-center mt-3 font-['JetBrains_Mono'] text-xs text-[#697483] hover:text-[#B8F24A]"
+                  >
+                    View {result.client_slug_resolved || "channel"} performance analytics →
+                  </a>
+                )}
               </>
-            )}
+              );
+            })()}
           </div>
         </div>
       </div>
