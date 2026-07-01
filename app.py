@@ -4,6 +4,7 @@ import re
 import tempfile
 import requests
 from datetime import datetime, timezone
+from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
@@ -12,8 +13,9 @@ from sentiment import run as sentiment_run
 
 # === SETUP ===
 # Key is read from an environment variable — never hardcoded.
-# Set it before running:  (Windows)  set YOUTUBE_API_KEY=your_new_key
-#                         (Mac/Linux) export YOUTUBE_API_KEY=your_new_key
+# Local dev: put YOUTUBE_API_KEY=... in a .env file at the repo root (gitignored).
+# Production (Railway etc.): set it as a real env var; load_dotenv() won't override that.
+load_dotenv()
 API_KEY = os.environ.get("YOUTUBE_API_KEY")
 YOUTUBE_API_URL = "https://www.googleapis.com/youtube/v3"
 TOOL_VERSION = "1.1.0"
