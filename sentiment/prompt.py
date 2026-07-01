@@ -39,6 +39,11 @@ def build_prompt(purpose_cfg, client_cfg, normalised_rows, provenance, scope,
     normalised_rows: list of dicts in the canonical §3.1 row shape (from sentiment/ingest.py).
     provenance: the provenance block dict for this run.
     scope: "per-video" | "synthesis".
+
+    Section order is deliberate (v1 feedback, 2026-07-01): engine core -> purpose brief ->
+    client context -> run inputs. Client context sits immediately before the run inputs, with
+    an explicit apply-it instruction, because v1's first live run produced a generic report
+    that never referenced the client config at all despite one being loaded.
     """
     sections = [config.load_engine_core()]
 
@@ -69,7 +74,13 @@ def build_prompt(purpose_cfg, client_cfg, normalised_rows, provenance, scope,
         )
 
     if client_cfg:
-        sections.append("\n---\n\n## Client config\n\n" + client_cfg["body"])
+        sections.append(
+            "\n---\n\n## Client config\n\n" + client_cfg["body"] +
+            "\n\n**Apply the client context above to every recommendation.** If a recommendation "
+            "could apply to any creator, it has not used the client context — revise it before "
+            "emitting. Reference what this client sells, their funnel, their strategic phase, and "
+            "respect their sensitivities, by name, in the report."
+        )
     else:
         sections.append(
             "\n---\n\n## Client config\n\nNo client_slug was available for this run (standalone "
@@ -77,7 +88,13 @@ def build_prompt(purpose_cfg, client_cfg, normalised_rows, provenance, scope,
             "invent a client."
         )
 
-    sections.append(f"\n---\n\n## Run scope\n\n`scope`: {scope}")
+    transcript_note = (
+        f"A transcript was provided for this run — use it for §8 (transcript-to-content mapping)."
+        if transcript else
+        "No transcript was provided for this run. Do not skip §8 silently — state plainly that it "
+        "could not be produced without a transcript and why, per the engine core's guidance."
+    )
+    sections.append(f"\n---\n\n## Run scope\n\n`scope`: {scope}\n\n{transcript_note}")
     if transcript:
         sections.append(f"\n### Transcript\n\n{transcript}")
     if team_notes:

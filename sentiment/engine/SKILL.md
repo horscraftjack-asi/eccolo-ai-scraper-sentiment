@@ -114,6 +114,12 @@ prominence — **strong / moderate / weak** — by how repeatedly and how strong
 **repeated patterns** from **isolated voices** (one dramatic comment is not a theme). `likes` is a
 useful prominence signal; high-liked comments and high-liked replies carry weight.
 
+**Do not inflate prominence, and do not invent evidence.** Label single-comment signals as isolated
+voices (`weak`), never as clusters or themes. Any count you state must be defensible from the set —
+prefer "recurring / several / a few / one" over invented figures. Cite evidence by **quoting real
+comments verbatim**; never fabricate a "representative" comment or import specifics (model names,
+products, numbers) the comments don't actually contain.
+
 ### Step 5 — Apply the purpose lens *(config-driven)*
 
 Now the purpose config takes over. It dictates:
@@ -132,10 +138,15 @@ their **voice** (how recommendations should be phrased), **audience** (sophistic
 respond to), **what they sell** and **funnel** (so insight connects to commercial reality),
 **strategic_phase** (what matters now), and **sensitivities** (anything the analysis must respect).
 
+The client config **must visibly shape the recommendations**. Before emitting, run this check: *if
+the output could apply to any creator, the client context has not been applied — revise it* so it
+references what they sell, their funnel, their phase, and respects their sensitivities.
+
 ### Step 7 — Emit both outputs
 
 1. **The human Markdown report** — structured exactly per the active purpose's `output_structure`.
-   This is the deliverable people read; it is never compromised for the machine output. Save as
+   This is the deliverable people read; it is never compromised for the machine output. Carry a few
+   **verbatim** audience quotes into the report as evidence (and into the summary where used). Save as
    `Sentiment Analysis - <Video or Topic> (<purpose_id>).md`. **British English throughout.**
 2. **The machine `summary.json`** — alongside the report, named `<report-stem>.summary.json`, per
    `SYSTEM_INTEGRATION_CONTRACT.md` §4. It carries the **provenance block** (from Step 1), the

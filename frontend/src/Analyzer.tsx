@@ -32,6 +32,12 @@ interface AnalyzeResult {
   purpose_resolved?: { display_name?: string } | null;
   client_resolved?: { client_name?: string } | null;
   report_markdown?: string;
+  client_slug_resolved?: string | null;
+  client_context_applied?: boolean;
+  truncated?: boolean;
+  continuations?: number;
+  summary_json?: Record<string, unknown> | null;
+  validation?: { valid: boolean; errors: string[]; warnings: string[] };
   [key: string]: unknown;
 }
 
@@ -276,13 +282,16 @@ export default function Analyzer({ scrapeResult, onBack }: AnalyzerProps) {
 
           <div>
             <label className="block text-sm font-medium text-slate-600 mb-2">
-              Transcript (optional)
+              Transcript{" "}
+              <span className="font-normal text-slate-400">
+                (optional — but populates §8 for course-development; without it, §8 will say so)
+              </span>
             </label>
             <textarea
               value={transcript}
               onChange={(e) => setTranscript(e.target.value)}
-              rows={3}
-              placeholder="Paste the video transcript…"
+              rows={4}
+              placeholder="Paste the video transcript — one of course-development's most valuable sections depends on it…"
               className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition"
             />
           </div>
@@ -332,7 +341,7 @@ export default function Analyzer({ scrapeResult, onBack }: AnalyzerProps) {
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 text-center">
+              <div className="grid grid-cols-3 gap-3 text-center">
                 <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
                   <div className="text-lg font-semibold text-slate-800">
                     {String(result.ingest_diagnostics?.rows_total ?? "—")}
@@ -343,10 +352,18 @@ export default function Analyzer({ scrapeResult, onBack }: AnalyzerProps) {
                 </div>
                 <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
                   <div className="text-lg font-semibold text-slate-800">
-                    {String(result.provenance?.client_slug ?? "standalone")}
+                    {String(result.client_slug_resolved ?? "standalone")}
                   </div>
                   <div className="text-xs text-slate-400 uppercase tracking-wide">
                     Client slug
+                  </div>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                  <div className="text-lg font-semibold text-slate-800">
+                    {result.client_context_applied ? "Yes" : "No"}
+                  </div>
+                  <div className="text-xs text-slate-400 uppercase tracking-wide">
+                    Client context applied
                   </div>
                 </div>
               </div>
@@ -380,8 +397,57 @@ export default function Analyzer({ scrapeResult, onBack }: AnalyzerProps) {
           {status === "done" && result?.status === "ok" && (
             <div className="space-y-3">
               <div className="p-4 rounded-xl bg-green-50 border border-green-200 text-sm text-green-800">
-                Report generated.
+                Report generated
+                {result.client_context_applied
+                  ? ` — client context applied (${result.client_slug_resolved}).`
+                  : " — run client-agnostic (no client_slug)."}
               </div>
+
+              {result.truncated && (
+                <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-50 border border-amber-200">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <p className="text-sm text-amber-800">
+                    Report may still be truncated after {result.continuations} continuation
+                    {result.continuations === 1 ? "" : "s"} — check the end of the report below.
+                  </p>
+                </div>
+              )}
+
+              {result.summary_json && result.validation && (
+                <div
+                  className={`flex items-start gap-3 p-4 rounded-xl border ${
+                    result.validation.valid
+                      ? "bg-green-50 border-green-200"
+                      : "bg-red-50 border-red-200"
+                  }`}
+                >
+                  <AlertTriangle
+                    className={`w-5 h-5 shrink-0 mt-0.5 ${
+                      result.validation.valid ? "text-green-600" : "text-red-500"
+                    }`}
+                  />
+                  <div className={`text-sm ${result.validation.valid ? "text-green-800" : "text-red-700"}`}>
+                    {result.validation.valid
+                      ? `summary.json is valid (contract §4)${
+                          result.validation.warnings.length
+                            ? ` — ${result.validation.warnings.length} warning(s)`
+                            : ""
+                        }.`
+                      : `summary.json failed validation: ${result.validation.errors.join("; ")}`}
+                  </div>
+                </div>
+              )}
+
+              {!result.summary_json && (
+                <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-50 border border-amber-200">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <p className="text-sm text-amber-800">
+                    No summary.json was found in the response — the report below is likely all
+                    that was returned before the token budget ran out.
+                  </p>
+                </div>
+              )}
+
               <pre className="p-3 rounded-lg bg-slate-50 border border-slate-200 overflow-auto max-h-96 whitespace-pre-wrap text-sm">
                 {result.report_markdown}
               </pre>

@@ -102,6 +102,13 @@ def analyze(*, rows, source_ids, client_slug, diagnostics, purpose_id, client_sl
         transcript=transcript, team_notes=team_notes,
     )
 
+    # Debugging aid for the v1 issue where a client config existed but was never actually
+    # injected into the prompt — surfaced explicitly rather than left to prompt inspection.
+    run_metadata = {
+        "client_slug_resolved": effective_client_slug,
+        "client_context_applied": client_cfg is not None,
+    }
+
     api_key = os.environ.get("ANTHROPIC_API_KEY")
 
     if not api_key:
@@ -113,9 +120,10 @@ def analyze(*, rows, source_ids, client_slug, diagnostics, purpose_id, client_sl
             "provenance": provenance,
             "purpose_resolved": purpose_cfg["fields"] if purpose_cfg else None,
             "client_resolved": client_cfg["fields"] if client_cfg else None,
+            **run_metadata,
         }
 
-    return _call_model(assembled_prompt, provenance, purpose_id)
+    return _call_model(assembled_prompt, provenance, purpose_id, run_metadata)
 
 
 def _split_report_and_summary(raw_text):
@@ -134,20 +142,47 @@ def _split_report_and_summary(raw_text):
         return report.strip(), None
 
 
-def _call_model(assembled_prompt, provenance, purpose_id):
+MAX_CONTINUATIONS = 3
+
+
+def _generate_with_continuation(client, model, max_tokens, prompt_text):
+    """
+    Calls the model, and if it stops on max_tokens (a real course-dev report can run long),
+    continues via assistant-prefill — resending the partial output as the trailing assistant
+    turn so the model picks up exactly where it left off — and stitches the pieces together.
+    Never silently returns a truncated report; if continuations run out, callers get a
+    `truncated=True` flag instead of a silent cut-off.
+    """
+    messages = [{"role": "user", "content": prompt_text}]
+    full_text = ""
+    continuations = 0
+
+    while True:
+        response = client.messages.create(model=model, max_tokens=max_tokens, messages=messages)
+        piece = "".join(block.text for block in response.content if hasattr(block, "text"))
+        full_text += piece
+
+        if response.stop_reason != "max_tokens" or continuations >= MAX_CONTINUATIONS:
+            return full_text, response.stop_reason == "max_tokens", continuations
+
+        continuations += 1
+        messages = [
+            {"role": "user", "content": prompt_text},
+            {"role": "assistant", "content": full_text},
+        ]
+
+
+def _call_model(assembled_prompt, provenance, purpose_id, run_metadata):
     """The live path — dark until ANTHROPIC_API_KEY exists. Mirrors the analytics /insights stub."""
     import anthropic
 
     model = os.environ.get("SENTIMENT_MODEL", "claude-sonnet-4-5")
-    max_tokens = int(os.environ.get("SENTIMENT_MAX_TOKENS", "8192"))
+    max_tokens = int(os.environ.get("SENTIMENT_MAX_TOKENS", "16000"))
 
     client = anthropic.Anthropic()
-    response = client.messages.create(
-        model=model,
-        max_tokens=max_tokens,
-        messages=[{"role": "user", "content": assembled_prompt}],
+    raw_text, truncated, continuations = _generate_with_continuation(
+        client, model, max_tokens, assembled_prompt
     )
-    raw_text = "".join(block.text for block in response.content if hasattr(block, "text"))
     report_markdown, summary_json = _split_report_and_summary(raw_text)
 
     result = {
@@ -156,6 +191,9 @@ def _call_model(assembled_prompt, provenance, purpose_id):
         "provenance": provenance,
         "purpose": purpose_id,
         "summary_json": summary_json,
+        "truncated": truncated,
+        "continuations": continuations,
+        **run_metadata,
     }
     if summary_json is not None:
         result["validation"] = validate(summary_json)

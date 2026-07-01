@@ -129,9 +129,17 @@ Prioritise insights meeting one or more (from the Hoffmann task brief §11):
 
 ## evidence_rules
 
-- Quote short excerpts where useful; paraphrase when comments are repetitive.
-- Don't over-weight one dramatic comment; distinguish repeated patterns from isolated opinions.
-- Note whether a theme appears **strong / moderate / weak**. Use `likes` as a prominence signal.
+- **Quote real comments verbatim** when citing evidence. Never paraphrase into a composite, and never
+  invent a "representative" comment — if you can't quote it from the set, you can't cite it.
+- **Never introduce specifics the comments don't contain** — no model names, factions, unit counts,
+  timelines, tools, or product names unless a comment actually states them. Do not fill gaps with
+  domain knowledge about the subject; the comments are the only evidence.
+- **Prominence must be earned.** `strong` = a pattern recurring across many comments; `moderate` = a
+  clear but smaller repeated pattern; `weak` = an isolated voice. A **single comment is an isolated
+  voice → `weak`, and must be labelled as such** — never present one comment as a "cluster" or theme.
+  Use `likes` as a prominence signal, not as a substitute for recurrence.
+- **Use grounded quantities only.** Prefer "recurring / several / a few / one" over invented figures
+  like "50+ comments"; state a number only if it is defensible from the set.
 - Preserve the audience's plain-language wording where it helps the team understand learners.
 - With a transcript: refer to specific sections/moments if available; state whether it resolves,
   partly resolves, or does not resolve a question; don't treat coverage as sufficient if comments show
@@ -145,7 +153,10 @@ Plain and direct. Clear headings, short paragraphs, useful tables, concrete reco
 links between audience evidence and course action. Write as someone trying to help the team make the
 course better — not someone selling a strategy project. **British English.** Avoid: corporate jargon,
 vague strategy language, inflated claims, filler, excessive methodology, long uninterpreted lists,
-generic education language that could apply to any course.
+generic education language that could apply to any course. **No inspirational/consultant filler** —
+ban report-voice phrases like "you've cracked something", "genuinely valuable", "next level",
+"this hits home". Keep the executive summary within its 250–500-word cap and open with the decision
+or next step, not a pep talk.
 
 ## summary_json_extensions
 
