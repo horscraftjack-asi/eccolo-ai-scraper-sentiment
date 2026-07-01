@@ -7,6 +7,30 @@ is always exactly what gets sent.
 
 from . import config
 
+# The literal contract §4 shape. Referencing "contract §4" in prose isn't enough — the model
+# needs the exact schema in front of it, including the field name ("name", not "theme"/"gap"/etc)
+# on every array item, or it will improvise a plausible-but-nonconforming shape (observed in
+# testing: a real run produced valid-looking JSON that used "gap"/"pain_point"/"theme" instead of
+# "name" and dropped the nested "provenance" object entirely).
+SUMMARY_JSON_SCHEMA = """```json
+{
+  "provenance": { "run_id": "...", "generated_at": "...", "tool": "sentiment", "tool_version": "...", "client_slug": "... or null", "source_ids": ["yt:..."] },
+  "purpose": "course-development | content-ideation | ip-development | qa-mining",
+  "themes": [
+    { "name": "Grind consistency", "prominence": "strong|moderate|weak", "source_ids": ["yt:..."] }
+  ],
+  "question_clusters": [
+    { "name": "What basket for my machine?", "covered_in_source": "fully|partly|not", "course_relevance": "module|section|demo" }
+  ],
+  "pain_points": [
+    { "name": "Flow rate changed unexplained", "prominence": "strong|moderate|weak", "course_response": "demonstration" }
+  ],
+  "gaps": [
+    { "name": "Pressurised baskets barely covered", "opportunity": "course-only content" }
+  ]
+}
+```"""
+
 
 def build_prompt(purpose_cfg, client_cfg, normalised_rows, provenance, scope,
                   transcript=None, team_notes=None):
@@ -28,8 +52,12 @@ def build_prompt(purpose_cfg, client_cfg, normalised_rows, provenance, scope,
         "This is a single API response, not a Claude Code session with file-writing tools — "
         "emit both Step 7 outputs in this one message: first the full Markdown report, then a "
         "line containing only `===SUMMARY_JSON===`, then a fenced ```json code block containing "
-        "the `summary.json` object exactly as specced in Step 7 / contract §4. Nothing after the "
-        "closing code fence."
+        "the `summary.json` object. Match this shape **exactly** — every array item's identifying "
+        "field is named `name` (not `theme`/`gap`/`pain_point`/etc), and `provenance` is a nested "
+        "object copied verbatim from the block given below, not flattened into top-level keys:\n\n"
+        f"{SUMMARY_JSON_SCHEMA}\n\n"
+        "A purpose config may define `summary_json_extensions` — add those as additional keys "
+        "alongside the ones above, never in place of them. Nothing after the closing code fence."
     )
 
     if purpose_cfg:
