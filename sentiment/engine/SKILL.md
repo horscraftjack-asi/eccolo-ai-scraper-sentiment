@@ -77,8 +77,9 @@ Resolve **one purpose** and **one client**, in this order, stopping at the first
 
 - **Purpose.** Take it from the request ("a *course-development* analysis", "mine these for *content
   ideas*" → `content-ideation`). Load `purposes/<purpose_id>.md`. If the request doesn't name one,
-  ask which of the four purposes this run is for — don't guess. (Only `course-development` is mature
-  in v1; the other three are stubs and won't produce mature output — say so if one is chosen.)
+  ask which of the four purposes this run is for — don't guess. (All four are now drafted to
+  maturity; `course-development` is the most battle-tested, the other three are newer and under
+  active A/B refinement — pick the one whose *unit of output* matches the job.)
 - **Client.** Take `client_slug` straight from the ingested provenance. Load `clients/<client_slug>.md`.
   - **Uploaded config wins.** If the person attached a `clients/*.md` or `*-sentiment-context.md`,
     use it (they're deliberately overriding).
@@ -185,8 +186,10 @@ Some inputs belong to a specific run, not to either reusable config:
   classification set.
 - **Don't bake a specific video into a purpose config.** Video title / "what was covered" is run input.
 - **Don't break standalone use.** Missing `client_slug` → prompt or run client-agnostic; never error.
-- **Don't expect mature output from a stub purpose** (`content-ideation`, `ip-development`,
-  `qa-mining` are shape-only in v1). Say so if one is run.
+- **Match the purpose to the job.** All four purposes are drafted to maturity, but each has a
+  distinct *unit of output* (course modules / a content slate / answerable questions / product
+  opportunities). Running a comment set through the wrong purpose forces the wrong shape onto it —
+  pick by what the audience signal actually is.
 - **The Markdown report is the human deliverable** and is never degraded to serve the `summary.json`.
 
 ---
@@ -194,8 +197,8 @@ Some inputs belong to a specific run, not to either reusable config:
 ## Files in this skill
 
 - `SKILL.md` — this engine core (the seven universal steps).
-- `purposes/course-development.md` — **mature** (built from the two Hoffmann briefs).
-- `purposes/content-ideation.md`, `purposes/ip-development.md`, `purposes/qa-mining.md` — **stubs** (shape only).
+- `purposes/course-development.md` — **mature** (built from the two Hoffmann briefs; most battle-tested).
+- `purposes/content-ideation.md`, `purposes/qa-mining.md`, `purposes/ip-development.md` — **mature** (drafted; under active A/B refinement).
 - `clients/jameshoffmann.md` — the James Hoffmann client context (design-spec §4.2 shape).
 - `scripts/sentiment_ingest.py` — deterministic ingest + provenance (canonical §3.1 / legacy CSV / native JSON).
 - `scripts/validate_summary.py` — validates the emitted `summary.json` against contract §4.

@@ -15,7 +15,7 @@ One flywheel app, two deployable services in one repo:
 │   ├── run.py              # orchestrates ingest -> prompt -> [model call] -> validate
 │   └── engine/
 │       ├── SKILL.md            # engine core (the seven universal steps)
-│       ├── purposes/*.md       # course-development (mature) + 3 stubs
+│       ├── purposes/*.md       # course-development, content-ideation, ip-development, qa-mining — all mature
 │       └── clients/*.md        # jameshoffmann, ninjon
 └── frontend/          # Vite + React + TypeScript UI
     ├── src/
