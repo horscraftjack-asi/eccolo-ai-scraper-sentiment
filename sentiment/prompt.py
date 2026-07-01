@@ -24,7 +24,12 @@ def build_prompt(purpose_cfg, client_cfg, normalised_rows, provenance, scope,
         "Ingest has already run (deterministically, outside this prompt). The comments below "
         "are already normalised to the canonical §3.1 row shape and the provenance block is "
         "already assembled — do not re-run `sentiment_ingest.py` or re-derive `source_id` / "
-        "`client_slug`; use the values given here verbatim in the `summary.json` you emit."
+        "`client_slug`; use the values given here verbatim in the `summary.json` you emit.\n\n"
+        "This is a single API response, not a Claude Code session with file-writing tools — "
+        "emit both Step 7 outputs in this one message: first the full Markdown report, then a "
+        "line containing only `===SUMMARY_JSON===`, then a fenced ```json code block containing "
+        "the `summary.json` object exactly as specced in Step 7 / contract §4. Nothing after the "
+        "closing code fence."
     )
 
     if purpose_cfg:

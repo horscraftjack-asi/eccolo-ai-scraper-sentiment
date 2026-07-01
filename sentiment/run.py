@@ -8,6 +8,7 @@ not reimplemented) — this module is only the glue between them and the API cal
 
 import json
 import os
+import re
 import tempfile
 from datetime import datetime, timezone
 
@@ -117,6 +118,22 @@ def analyze(*, rows, source_ids, client_slug, diagnostics, purpose_id, client_sl
     return _call_model(assembled_prompt, provenance, purpose_id)
 
 
+def _split_report_and_summary(raw_text):
+    """Splits the model's single response on the ===SUMMARY_JSON=== marker (see prompt.py)
+    and pulls the summary.json object out of its fenced code block."""
+    marker = "===SUMMARY_JSON==="
+    if marker not in raw_text:
+        return raw_text.strip(), None
+    report, _, rest = raw_text.partition(marker)
+    m = re.search(r"```(?:json)?\s*(.*?)```", rest, re.DOTALL)
+    if not m:
+        return report.strip(), None
+    try:
+        return report.strip(), json.loads(m.group(1))
+    except json.JSONDecodeError:
+        return report.strip(), None
+
+
 def _call_model(assembled_prompt, provenance, purpose_id):
     """The live path — dark until ANTHROPIC_API_KEY exists. Mirrors the analytics /insights stub."""
     import anthropic
@@ -130,17 +147,19 @@ def _call_model(assembled_prompt, provenance, purpose_id):
         max_tokens=max_tokens,
         messages=[{"role": "user", "content": assembled_prompt}],
     )
-    # Expected: the model returns the Markdown report and a fenced ```json summary.json
-    # block. Parsing/validation of that shape is TODO for when the key lands and a real
-    # response can be inspected — left unimplemented rather than guessed at.
     raw_text = "".join(block.text for block in response.content if hasattr(block, "text"))
+    report_markdown, summary_json = _split_report_and_summary(raw_text)
 
-    return {
+    result = {
         "status": "ok",
-        "report_markdown": raw_text,
+        "report_markdown": report_markdown,
         "provenance": provenance,
         "purpose": purpose_id,
+        "summary_json": summary_json,
     }
+    if summary_json is not None:
+        result["validation"] = validate(summary_json)
+    return result
 
 
 def validate(summary_json_doc):
