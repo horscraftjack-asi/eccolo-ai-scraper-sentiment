@@ -93,7 +93,7 @@ export function csvField(value: unknown): string {
 // ─────────────────────────────────────────────────────────────
 // Recently-scraped videos, kept client-side so the Input screen can
 // show a short history without needing a backend table for it.
-const RECENT_KEY = "threadline_recent_scrapes";
+const RECENT_KEY = "eccolo_recent_scrapes";
 
 export interface RecentScrape {
   videoId: string;

@@ -338,12 +338,12 @@ export default function CommentScraper({
             <span className="w-[11px] h-[11px] rounded-full bg-[#2a323d]" />
             <span className="ml-2 font-['JetBrains_Mono'] text-xs text-[#5b6573]">
               {status === "loading"
-                ? "threadline — scraping…"
+                ? "eccolo — scraping…"
                 : status === "done"
-                ? "threadline — done"
+                ? "eccolo — done"
                 : status === "error"
-                ? "threadline — error"
-                : "threadline — ~/scrape"}
+                ? "eccolo — error"
+                : "eccolo — ~/scrape"}
             </span>
           </div>
 
@@ -359,7 +359,7 @@ export default function CommentScraper({
                   ⌁
                 </span>
                 <span className="font-['JetBrains_Mono'] font-semibold text-xs tracking-[.24em] text-[#aab3c0]">
-                  THREADLINE
+                  ECCOLO
                 </span>
               </div>
               {ANALYTICS_URL && (
