@@ -104,9 +104,12 @@ def analyze(*, rows, source_ids, client_slug, diagnostics, purpose_id, client_sl
 
     # Debugging aid for the v1 issue where a client config existed but was never actually
     # injected into the prompt — surfaced explicitly rather than left to prompt inspection.
+    # ingest_diagnostics travels via run_metadata so both the "not_enabled" stub and a real
+    # model response carry it identically (the result UI shows a real comment count either way).
     run_metadata = {
         "client_slug_resolved": effective_client_slug,
         "client_context_applied": client_cfg is not None,
+        "ingest_diagnostics": diagnostics,
     }
 
     api_key = os.environ.get("ANTHROPIC_API_KEY")
@@ -116,7 +119,6 @@ def analyze(*, rows, source_ids, client_slug, diagnostics, purpose_id, client_sl
             "status": "not_enabled",
             "reason": "no ANTHROPIC_API_KEY",
             "assembled_prompt": assembled_prompt,
-            "ingest_diagnostics": diagnostics,
             "provenance": provenance,
             "purpose_resolved": purpose_cfg["fields"] if purpose_cfg else None,
             "client_resolved": client_cfg["fields"] if client_cfg else None,

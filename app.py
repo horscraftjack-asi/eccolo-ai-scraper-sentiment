@@ -67,8 +67,18 @@ def get_video_comments(video_id):
 
         if response.status_code == 403:
             raise Exception("Comments are likely disabled for this video, or your API key is invalid/out of quota.")
+        elif response.status_code == 404:
+            raise Exception("That video couldn't be found — check the link, or it may have been removed.")
         elif response.status_code != 200:
-            raise Exception(f"API Error {response.status_code}: {response.text}")
+            # Surface the API's own reason where we can parse it; raw body as a last resort
+            # so nothing is silently swallowed, just not shown as the primary line.
+            reason = ""
+            try:
+                reason = response.json()["error"]["errors"][0].get("reason", "")
+            except (ValueError, KeyError, IndexError):
+                pass
+            detail = f" ({reason})" if reason else f": {response.text}"
+            raise Exception(f"API Error {response.status_code}{detail}")
 
         data = response.json()
 
