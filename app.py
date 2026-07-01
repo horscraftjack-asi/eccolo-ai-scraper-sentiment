@@ -1,9 +1,14 @@
+import json
 import os
 import re
+import tempfile
 import requests
 from datetime import datetime, timezone
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+
+from sentiment import config as sentiment_config
+from sentiment import run as sentiment_run
 
 # === SETUP ===
 # Key is read from an environment variable — never hardcoded.
@@ -175,6 +180,100 @@ def scrape():
         },
         "comments": comments,  # threaded: replies nested under each parent
     }
+
+    return jsonify(result)
+
+
+# ---------------------------------------------------------------------------
+# SENTIMENT ANALYZER — scrape -> ingest -> configs -> prompt -> [model, gated]
+# ---------------------------------------------------------------------------
+
+@app.route("/sentiment/options", methods=["GET"])
+def sentiment_options():
+    """Self-populates the purpose/client dropdowns from the config folders."""
+    return jsonify({
+        "purposes": [
+            {k: p[k] for k in ("purpose_id", "display_name", "one_line", "status")}
+            for p in sentiment_config.available_purposes()
+        ],
+        "clients": [
+            {k: c[k] for k in ("client_slug", "client_name")}
+            for c in sentiment_config.available_clients()
+        ],
+        "analyzer_enabled": bool(os.environ.get("ANTHROPIC_API_KEY")),
+    })
+
+
+@app.route("/analyze", methods=["POST"])
+def analyze():
+    purpose_id = (request.form.get("purpose_id") or "").strip()
+    client_slug_input = (request.form.get("client_slug") or "").strip().lower() or None
+    scope = (request.form.get("scope") or "per-video").strip()
+    transcript = request.form.get("transcript") or None
+    team_notes = request.form.get("team_notes") or None
+
+    if not purpose_id:
+        return jsonify({"error": "purpose_id is required."}), 400
+
+    uploaded_file = request.files.get("file")
+    scrape_result_raw = request.form.get("scrape_result")
+
+    uploaded_purpose_path = None
+    if request.files.get("purpose_config"):
+        f = request.files["purpose_config"]
+        tmp = tempfile.NamedTemporaryFile(suffix=".md", delete=False)
+        f.save(tmp.name)
+        uploaded_purpose_path = tmp.name
+
+    uploaded_client_path = None
+    if request.files.get("client_config"):
+        f = request.files["client_config"]
+        tmp = tempfile.NamedTemporaryFile(suffix=".md", delete=False)
+        f.save(tmp.name)
+        uploaded_client_path = tmp.name
+
+    try:
+        if uploaded_file and uploaded_file.filename:
+            rows, source_ids, client_slug, diagnostics = sentiment_run.ingest_from_upload(
+                uploaded_file, client_slug_override=client_slug_input
+            )
+        elif scrape_result_raw:
+            try:
+                scrape_result = json.loads(scrape_result_raw)
+            except json.JSONDecodeError:
+                return jsonify({"error": "scrape_result is not valid JSON."}), 400
+            rows, source_ids, client_slug, diagnostics = sentiment_run.ingest_from_scrape_result(
+                scrape_result, client_slug_override=client_slug_input
+            )
+        else:
+            return jsonify({
+                "error": "Provide either an uploaded comments file ('file') or an in-app "
+                         "scrape result ('scrape_result')."
+            }), 400
+    except Exception as e:
+        return jsonify({"error": f"Ingest failed: {e}"}), 422
+
+    try:
+        result = sentiment_run.analyze(
+            rows=rows,
+            source_ids=source_ids,
+            client_slug=client_slug,
+            diagnostics=diagnostics,
+            purpose_id=purpose_id,
+            client_slug_input=client_slug_input,
+            scope=scope,
+            transcript=transcript,
+            team_notes=team_notes,
+            uploaded_purpose_path=uploaded_purpose_path,
+            uploaded_client_path=uploaded_client_path,
+        )
+    finally:
+        for p in (uploaded_purpose_path, uploaded_client_path):
+            if p:
+                os.unlink(p)
+
+    if result["status"] == "not_enabled":
+        return jsonify(result), 503
 
     return jsonify(result)
 

@@ -1,73 +1,18 @@
 import { useState } from "react";
-import { Download, Loader2, CheckCircle2, AlertCircle, Youtube } from "lucide-react";
-
-// ─────────────────────────────────────────────────────────────
-// The address of the Flask backend, injected at build time.
-// Set VITE_BACKEND_URL in your environment (Railway → Variables).
-// Falls back to localhost for `npm run dev`.
-function resolveBackendUrl(): string {
-  const raw = (import.meta.env.VITE_BACKEND_URL ?? "").trim();
-  if (!raw) return "http://localhost:5000"; // dev fallback
-  const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
-  return withScheme.replace(/\/+$/, ""); // no trailing slash
-}
-
-const BACKEND_URL = resolveBackendUrl();
-// ─────────────────────────────────────────────────────────────
+import { Download, Loader2, CheckCircle2, AlertCircle, Youtube, ArrowRight } from "lucide-react";
+import { BACKEND_URL, normalizeClientSlug, csvField, type ScrapeResult } from "./shared";
 
 type Status = "idle" | "loading" | "done" | "error";
 
-interface Comment {
-  comment_id: string;
-  author?: string;
-  text?: string;
-  likes?: number;
-  published_at?: string;
-  replies: Array<{
-    reply_id: string;
-    author?: string;
-    text?: string;
-    likes?: number;
-    published_at?: string;
-  }>;
+interface CommentScraperProps {
+  onSendToAnalyzer: (result: ScrapeResult) => void;
+  onGoToAnalyzerStandalone: () => void;
 }
 
-interface ScrapeResult {
-  video?: {
-    title?: string;
-    channel?: string;
-    video_id?: string;
-  };
-  summary?: {
-    top_level_comments?: number;
-    total_replies?: number;
-    total_items?: number;
-  };
-  comments?: Comment[];
-  source_id?: string;
-  provenance?: {
-    run_id?: string;
-    generated_at?: string;
-    tool?: string;
-    tool_version?: string;
-    client_slug?: string | null;
-    source_ids?: string[];
-  };
-  [key: string]: unknown;
-}
-
-// Soft-normalise a client slug: lowercase, strip spaces. Never blocks submission.
-function normalizeClientSlug(raw: string): string {
-  return raw.trim().toLowerCase().replace(/\s+/g, "");
-}
-
-// Minimal well-formed CSV field quoting: quote always, double embedded quotes.
-function csvField(value: unknown): string {
-  const s = value === null || value === undefined ? "" : String(value);
-  return `"${s.replace(/"/g, '""')}"`;
-}
-
-export default function CommentScraper() {
+export default function CommentScraper({
+  onSendToAnalyzer,
+  onGoToAnalyzerStandalone,
+}: CommentScraperProps) {
   const [url, setUrl] = useState("");
   const [clientSlug, setClientSlug] = useState("");
   const [status, setStatus] = useState<Status>("idle");
@@ -317,6 +262,13 @@ export default function CommentScraper() {
                 Download CSV
               </button>
               <button
+                onClick={() => onSendToAnalyzer(result)}
+                className="w-full mt-2 py-3 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 transition flex items-center justify-center gap-2"
+              >
+                Send to Analyzer
+                <ArrowRight className="w-5 h-5" />
+              </button>
+              <button
                 onClick={reset}
                 className="w-full mt-2 py-2.5 rounded-xl text-slate-500 font-medium hover:bg-slate-50 transition"
               >
@@ -328,6 +280,14 @@ export default function CommentScraper() {
 
         <p className="text-center text-xs text-slate-400 mt-6">
           Output is threaded JSON with full metadata — ready to feed straight into analysis.
+        </p>
+        <p className="text-center mt-3">
+          <button
+            onClick={onGoToAnalyzerStandalone}
+            className="text-sm text-indigo-600 hover:text-indigo-800 underline"
+          >
+            Or analyze an existing comments export →
+          </button>
         </p>
       </div>
     </div>
