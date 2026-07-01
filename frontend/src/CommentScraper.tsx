@@ -349,17 +349,29 @@ export default function CommentScraper({
 
           <div className="p-[30px]">
             {/* Logo row */}
-            <div className="flex items-center gap-[10px] mb-8">
-              <span
-                className={`w-[26px] h-[26px] rounded-[7px] bg-[#B8F24A] flex items-center justify-center text-[#0E1218] font-bold text-sm ${
-                  status === "loading" ? "animate-[tl-soft_1.3s_ease-in-out_infinite]" : ""
-                }`}
-              >
-                ⌁
-              </span>
-              <span className="font-['JetBrains_Mono'] font-semibold text-xs tracking-[.24em] text-[#aab3c0]">
-                THREADLINE
-              </span>
+            <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center gap-[10px]">
+                <span
+                  className={`w-[26px] h-[26px] rounded-[7px] bg-[#B8F24A] flex items-center justify-center text-[#0E1218] font-bold text-sm ${
+                    status === "loading" ? "animate-[tl-soft_1.3s_ease-in-out_infinite]" : ""
+                  }`}
+                >
+                  ⌁
+                </span>
+                <span className="font-['JetBrains_Mono'] font-semibold text-xs tracking-[.24em] text-[#aab3c0]">
+                  THREADLINE
+                </span>
+              </div>
+              {ANALYTICS_URL && (
+                <a
+                  href={analyticsLinkFor()}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-['JetBrains_Mono'] text-xs text-[#697483] hover:text-[#B8F24A]"
+                >
+                  Analytics ↗
+                </a>
+              )}
             </div>
 
             {status === "idle" && (

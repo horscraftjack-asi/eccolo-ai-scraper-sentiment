@@ -292,12 +292,24 @@ export default function Analyzer({ scrapeResult, onBack }: AnalyzerProps) {
                   SENTIMENT ANALYZER
                 </span>
               </div>
-              <button
-                onClick={onBack}
-                className="font-['JetBrains_Mono'] text-xs text-[#697483] hover:text-[#B8F24A]"
-              >
-                ← Back to scraper
-              </button>
+              <div className="flex items-center gap-[14px]">
+                {ANALYTICS_URL && (
+                  <a
+                    href={analyticsLinkFor()}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-['JetBrains_Mono'] text-xs text-[#697483] hover:text-[#B8F24A]"
+                  >
+                    Analytics ↗
+                  </a>
+                )}
+                <button
+                  onClick={onBack}
+                  className="font-['JetBrains_Mono'] text-xs text-[#697483] hover:text-[#B8F24A]"
+                >
+                  ← Back to scraper
+                </button>
+              </div>
             </div>
 
             {status === "idle" && (

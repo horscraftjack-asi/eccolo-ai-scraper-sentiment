@@ -76,13 +76,16 @@ This app and `ziggurat-analytics-engine` are **separate repos, separate Railway 
 URLs** — deliberately not merged (a bug in one shouldn't take the other down). They're tied together
 at the UI layer with plain links carrying context via query params, not a shared frontend:
 
-- **This app → Analytics:** once `VITE_ANALYTICS_URL` is set, a "View performance analytics →"
-  link appears after a scrape and after a sentiment run, opening
-  `<analytics-url>/?client=<slug>` in a new tab (preselects that client's dropdown there — silently
-  falls back to no preselection if the slug isn't recognised).
-- **Analytics → this app:** already built on the analytics-engine side (`SCRAPER_URL` env var) — it
-  opens `<this-app-url>/?url=<video-url>` for its top YouTube post. This app reads `?url=` (and
-  `?client_slug=`) on load and prefills the scrape form accordingly.
+- **Permanent nav:** an "Analytics ↗" link sits in the header on both the Scraper and Analyzer
+  views at all times (once `VITE_ANALYTICS_URL` is set) — not tied to any run, just a plain jump
+  to `<analytics-url>/`.
+- **Contextual hop, this app → Analytics:** after a scrape or a sentiment run, "View performance
+  analytics →" opens `<analytics-url>/?client=<slug>` in a new tab, preselecting that client's
+  dropdown there (silently falls back to no preselection if the slug isn't recognised).
+- **Contextual hop, Analytics → this app:** built on the analytics-engine side (`SCRAPER_URL` env
+  var) — its "Scrape top video →" button only appears when the top-ranked post in that run is
+  specifically a YouTube post, and opens `<this-app-url>/?url=<video-url>`. This app reads `?url=`
+  (and `?client_slug=`) on load and prefills the scrape form accordingly.
 
 Neither hop is required — unset either env var and that link just doesn't appear. Standalone use of
 either app is never broken by the other being down or unconfigured.
