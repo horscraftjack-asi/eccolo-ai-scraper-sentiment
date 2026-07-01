@@ -5,10 +5,32 @@ import { Download, Loader2, CheckCircle2, AlertCircle, Youtube } from "lucide-re
 // The address of the Flask backend, injected at build time.
 // Set VITE_BACKEND_URL in your environment (Railway → Variables).
 // Falls back to localhost for `npm run dev`.
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? "http://localhost:5000";
+function resolveBackendUrl(): string {
+  const raw = (import.meta.env.VITE_BACKEND_URL ?? "").trim();
+  if (!raw) return "http://localhost:5000"; // dev fallback
+  const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  return withScheme.replace(/\/+$/, ""); // no trailing slash
+}
+
+const BACKEND_URL = resolveBackendUrl();
 // ─────────────────────────────────────────────────────────────
 
 type Status = "idle" | "loading" | "done" | "error";
+
+interface Comment {
+  comment_id: string;
+  author?: string;
+  text?: string;
+  likes?: number;
+  published_at?: string;
+  replies: Array<{
+    reply_id: string;
+    author?: string;
+    text?: string;
+    likes?: number;
+    published_at?: string;
+  }>;
+}
 
 interface ScrapeResult {
   video?: {
@@ -21,11 +43,33 @@ interface ScrapeResult {
     total_replies?: number;
     total_items?: number;
   };
+  comments?: Comment[];
+  source_id?: string;
+  provenance?: {
+    run_id?: string;
+    generated_at?: string;
+    tool?: string;
+    tool_version?: string;
+    client_slug?: string | null;
+    source_ids?: string[];
+  };
   [key: string]: unknown;
+}
+
+// Soft-normalise a client slug: lowercase, strip spaces. Never blocks submission.
+function normalizeClientSlug(raw: string): string {
+  return raw.trim().toLowerCase().replace(/\s+/g, "");
+}
+
+// Minimal well-formed CSV field quoting: quote always, double embedded quotes.
+function csvField(value: unknown): string {
+  const s = value === null || value === undefined ? "" : String(value);
+  return `"${s.replace(/"/g, '""')}"`;
 }
 
 export default function CommentScraper() {
   const [url, setUrl] = useState("");
+  const [clientSlug, setClientSlug] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [result, setResult] = useState<ScrapeResult | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
@@ -36,16 +80,35 @@ export default function CommentScraper() {
     setErrorMsg("");
     setResult(null);
 
+    const normalizedSlug = normalizeClientSlug(clientSlug);
+    const requestBody = {
+      url: url.trim(),
+      client_slug: normalizedSlug || null,
+    };
+
+    const fetchUrl = `${BACKEND_URL}/scrape`;
     try {
-      const res = await fetch(`${BACKEND_URL}/scrape`, {
+      const res = await fetch(fetchUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: url.trim() }),
+        body: JSON.stringify(requestBody),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Something went wrong fetching comments.");
+
+      const contentType = res.headers.get("content-type") ?? "";
+      if (!contentType.includes("application/json")) {
+        throw new Error(
+          `Backend did not return JSON — called ${fetchUrl}. ` +
+            `This usually means VITE_BACKEND_URL is empty or scheme-less, ` +
+            `so the request hit the frontend instead of the backend. ` +
+            `Got Content-Type: "${contentType}".`
+        );
       }
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody?.error ?? `Backend returned ${res.status} from ${fetchUrl}`);
+      }
+
+      const data = await res.json();
       setResult(data as ScrapeResult);
       setStatus("done");
     } catch (e) {
@@ -69,8 +132,68 @@ export default function CommentScraper() {
     URL.revokeObjectURL(link.href);
   };
 
+  const downloadCsv = () => {
+    if (!result) return;
+    const sourceId = result.source_id ?? "";
+    const slug = result.provenance?.client_slug ?? "";
+
+    const header = [
+      "client_slug",
+      "source_id",
+      "comment_id",
+      "parent_id",
+      "author",
+      "text",
+      "likes",
+      "published_at",
+      "is_reply",
+    ];
+    const rows: string[] = [header.join(",")];
+
+    for (const comment of result.comments ?? []) {
+      rows.push(
+        [
+          csvField(slug),
+          csvField(sourceId),
+          csvField(comment.comment_id),
+          csvField(""),
+          csvField(comment.author),
+          csvField(comment.text),
+          csvField(comment.likes ?? ""),
+          csvField(comment.published_at),
+          csvField(false),
+        ].join(",")
+      );
+      for (const reply of comment.replies ?? []) {
+        rows.push(
+          [
+            csvField(slug),
+            csvField(sourceId),
+            csvField(reply.reply_id),
+            csvField(comment.comment_id),
+            csvField(reply.author),
+            csvField(reply.text),
+            csvField(reply.likes ?? ""),
+            csvField(reply.published_at),
+            csvField(true),
+          ].join(",")
+        );
+      }
+    }
+
+    const csv = rows.join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    const videoId = result.video?.video_id || "scrape";
+    link.download = `${slug || "scrape"}_${videoId}_comments.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+
   const reset = () => {
     setUrl("");
+    setClientSlug("");
     setStatus("idle");
     setResult(null);
     setErrorMsg("");
@@ -99,6 +222,19 @@ export default function CommentScraper() {
                 onChange={(e) => setUrl(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && status !== "loading" && run()}
                 placeholder="https://www.youtube.com/watch?v=..."
+                disabled={status === "loading"}
+                className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:border-red-400 focus:ring-2 focus:ring-red-100 outline-none transition disabled:bg-slate-50 disabled:text-slate-400"
+              />
+
+              <label className="block text-sm font-medium text-slate-600 mb-2 mt-4">
+                Client slug (optional)
+              </label>
+              <input
+                type="text"
+                value={clientSlug}
+                onChange={(e) => setClientSlug(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && status !== "loading" && run()}
+                placeholder="e.g. jameshoffmann"
                 disabled={status === "loading"}
                 className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:border-red-400 focus:ring-2 focus:ring-red-100 outline-none transition disabled:bg-slate-50 disabled:text-slate-400"
               />
@@ -172,6 +308,13 @@ export default function CommentScraper() {
               >
                 <Download className="w-5 h-5" />
                 Download JSON
+              </button>
+              <button
+                onClick={downloadCsv}
+                className="w-full mt-2 py-3 rounded-xl bg-slate-700 text-white font-medium hover:bg-slate-800 transition flex items-center justify-center gap-2"
+              >
+                <Download className="w-5 h-5" />
+                Download CSV
               </button>
               <button
                 onClick={reset}

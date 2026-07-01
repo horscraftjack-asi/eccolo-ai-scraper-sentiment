@@ -11,6 +11,7 @@ from flask_cors import CORS
 #                         (Mac/Linux) export YOUTUBE_API_KEY=your_new_key
 API_KEY = os.environ.get("YOUTUBE_API_KEY")
 YOUTUBE_API_URL = "https://www.googleapis.com/youtube/v3"
+TOOL_VERSION = "1.1.0"
 
 app = Flask(__name__)
 
@@ -134,6 +135,7 @@ def scrape():
 
     body = request.get_json(silent=True) or {}
     url_or_id = (body.get("url") or "").strip()
+    client_slug = body.get("client_slug") or None
 
     if not url_or_id:
         return jsonify({"error": "Please provide a YouTube URL."}), 400
@@ -151,10 +153,21 @@ def scrape():
         return jsonify({"error": str(e)}), 502
 
     total_replies = sum(len(c["replies"]) for c in comments)
+    source_id = f"yt:{video_id}"
+    generated_at = datetime.now(timezone.utc).isoformat()
 
     result = {
+        "provenance": {
+            "run_id": f"scrape-{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}",
+            "generated_at": generated_at,
+            "tool": "scraper",
+            "tool_version": TOOL_VERSION,
+            "client_slug": client_slug,
+            "source_ids": [source_id],
+        },
+        "source_id": source_id,
         "video": metadata,
-        "scraped_at": datetime.now(timezone.utc).isoformat(),
+        "scraped_at": generated_at,
         "summary": {
             "top_level_comments": len(comments),
             "total_replies": total_replies,
