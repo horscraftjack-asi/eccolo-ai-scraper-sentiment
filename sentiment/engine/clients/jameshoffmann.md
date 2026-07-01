@@ -12,7 +12,7 @@ client_name: James Hoffmann
 
 > **Slug note (flag for Jack).** The design spec (§4.2) and the integration contract's own examples
 > (§1.1) use `jameshoffmann`, and this config is built to that. But the canonical slug *registry* —
-> per contract §1.1, the config files in `ziggurat-analytics-engine/configs/` — currently holds
+> per contract §1.1, the config files in `eccolo-ai-data-engine/configs/` — currently holds
 > `hoffmann` (`hoffmann-analytics-config.md`, `client_slug: hoffmann`). That's a genuine spine
 > mismatch: the analytics engine would key this creator as `hoffmann`, the sentiment engine as
 > `jameshoffmann`, and the two side-outputs wouldn't join by ID. The contract says slug conflicts

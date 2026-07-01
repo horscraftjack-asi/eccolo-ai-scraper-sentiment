@@ -72,7 +72,7 @@ Create **two separate services** in the same Railway project, both pointing at t
 
 ## The flywheel cross-link to Analytics
 
-This app and `ziggurat-analytics-engine` are **separate repos, separate Railway deploys, separate
+This app and `eccolo-ai-data-engine` are **separate repos, separate Railway deploys, separate
 URLs** — deliberately not merged (a bug in one shouldn't take the other down). They're tied together
 at the UI layer with plain links carrying context via query params, not a shared frontend:
 
