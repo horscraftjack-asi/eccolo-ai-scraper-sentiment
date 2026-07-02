@@ -10,17 +10,17 @@ client_slug: jameshoffmann
 client_name: James Hoffmann
 ```
 
-> **Slug note (flag for Jack).** The design spec (§4.2) and the integration contract's own examples
-> (§1.1) use `jameshoffmann`, and this config is built to that. But the canonical slug *registry* —
-> per contract §1.1, the config files in `eccolo-ai-data-engine/configs/` — currently holds
-> `hoffmann` (`hoffmann-analytics-config.md`, `client_slug: hoffmann`). That's a genuine spine
-> mismatch: the analytics engine would key this creator as `hoffmann`, the sentiment engine as
-> `jameshoffmann`, and the two side-outputs wouldn't join by ID. The contract says slug conflicts
-> resolve **in favour of the registry**, so this should be reconciled deliberately (rename the
-> analytics config to `jameshoffmann`, or rename this to `hoffmann`) before the feedback loop is
-> built. Not blocking v1; surfaced rather than silently picked. **This config is the source of truth
-> for who the creator is — it intentionally reuses the same facts as the analytics config, not forks
-> them.**
+> **Slug note — RECONCILED 2026-07-02.** This creator is keyed `jameshoffmann` across both repos.
+> History: the design spec (§4.2) and the integration contract's own examples (§1.1) use
+> `jameshoffmann`, and this config was always built to that. The analytics registry, however,
+> originally held `hoffmann` (`hoffmann-analytics-config.md`, `client_slug: hoffmann`) — a genuine
+> spine mismatch that broke the by-ID join and the `?client=jameshoffmann` cross-link preselect.
+> **Resolution (Phase 1):** the analytics config was renamed to `jameshoffmann-analytics-config.md`
+> and its `client_slug` set to `jameshoffmann`, per the contract's own §1.1 naming rule (multi-word
+> names collapse to one token) — the registry entry was the drift, not this config. Both sides now
+> agree; no change was needed here beyond recording the reconciliation. **This config remains the
+> source of truth for who the creator is — it intentionally reuses the same facts as the analytics
+> config, not forks them.**
 
 This is a lightweight sibling of `hoffmann-analytics-config.md` — the purpose-agnostic "who is this
 creator" facts, distilled. It is read by the sentiment engine to colour interpretation (Step 6). It is

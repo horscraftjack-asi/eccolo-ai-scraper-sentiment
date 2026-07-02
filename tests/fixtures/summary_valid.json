@@ -1,0 +1,23 @@
+{
+  "provenance": {
+    "run_id": "sentiment-20260701T120000Z",
+    "generated_at": "2026-07-01T12:00:00Z",
+    "tool": "sentiment",
+    "tool_version": "1.0.0",
+    "client_slug": "jameshoffmann",
+    "source_ids": ["yt:abc123DEF45"]
+  },
+  "purpose": "course-development",
+  "themes": [
+    { "name": "Grind consistency", "prominence": "strong", "source_ids": ["yt:abc123DEF45"] }
+  ],
+  "question_clusters": [
+    { "name": "What basket for my machine?", "covered_in_source": "partly", "course_relevance": "module" }
+  ],
+  "pain_points": [
+    { "name": "Flow rate changed unexplained", "prominence": "moderate", "course_response": "demonstration" }
+  ],
+  "gaps": [
+    { "name": "Pressurised baskets barely covered", "opportunity": "course-only content" }
+  ]
+}

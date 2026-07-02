@@ -1,0 +1,27 @@
+{
+  "video": {
+    "video_id": "JSONvid1234",
+    "video_url": "https://youtu.be/JSONvid1234"
+  },
+  "provenance": {
+    "client_slug": "ninjon"
+  },
+  "comments": [
+    {
+      "comment_id": "j1",
+      "author": "Eve",
+      "text": "Top tier",
+      "likes": 9,
+      "published_at": "2026-07-01T08:00:00Z",
+      "replies": [
+        {
+          "comment_id": "j2",
+          "author": "Frank",
+          "text": "For sure",
+          "likes": 0,
+          "published_at": "2026-07-01T08:15:00Z"
+        }
+      ]
+    }
+  ]
+}

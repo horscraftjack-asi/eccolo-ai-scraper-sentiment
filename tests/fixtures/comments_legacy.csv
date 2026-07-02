@@ -1,0 +1,3 @@
+id,parent,author_name,comment_text,like_count,published_time,video_url
+x1,,Carol,Nice one,7,2026-06-01T09:00:00Z,https://youtu.be/ZZZ9988abcd
+x2,x1,Dave,Thanks Carol,1,2026-06-01T09:30:00Z,https://youtu.be/ZZZ9988abcd

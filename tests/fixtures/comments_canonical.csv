@@ -1,0 +1,3 @@
+client_slug,source_id,comment_id,parent_id,author,text,likes,published_at,is_reply
+jameshoffmann,yt:abc123DEF45,c1,,Alice,Great video,5,2026-05-01T10:00:00Z,false
+jameshoffmann,yt:abc123DEF45,c2,c1,Bob,Agreed with this,2,2026-05-01T11:00:00Z,true
