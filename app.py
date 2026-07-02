@@ -279,6 +279,13 @@ def analyze():
             uploaded_purpose_path=uploaded_purpose_path,
             uploaded_client_path=uploaded_client_path,
         )
+    except Exception as e:
+        # Anything from the live model call (network error, bad/misconfigured API key,
+        # rate limit, timeout, etc.) must still come back as JSON — an uncaught exception
+        # here falls through to Flask's default HTML error page, which the frontend can't
+        # parse and reports as a bare "Backend did not return JSON".
+        app.logger.exception("/analyze failed during sentiment_run.analyze()")
+        return jsonify({"error": f"Analysis failed: {e}"}), 502
     finally:
         for p in (uploaded_purpose_path, uploaded_client_path):
             if p:
