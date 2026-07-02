@@ -82,13 +82,20 @@ def build_provenance(client_slug, source_ids, run_id=None):
     }
 
 
-def analyze(*, rows, source_ids, client_slug, diagnostics, purpose_id, client_slug_input,
+def prepare(*, rows, source_ids, client_slug, diagnostics, purpose_id, client_slug_input,
             scope, transcript=None, team_notes=None, uploaded_purpose_path=None,
             uploaded_client_path=None):
     """
-    Runs configs resolution + prompt assembly, then either calls the model (if
-    ANTHROPIC_API_KEY is set) or returns the "not enabled" stub. Always returns a
-    dict describing what happened — the caller (Flask route) decides the HTTP status.
+    The FAST, synchronous half of a run: config resolution + prompt assembly + provenance.
+    Sub-second — safe to run inside the HTTP request.
+
+    Returns one of:
+      - {"terminal": True,  "result": {...}}  — nothing more to do; caller returns `result`
+        directly. This is the "not_enabled" stub (no API key), which never needed the model.
+      - {"terminal": False, "assembled_prompt", "provenance", "purpose_id", "run_metadata"}
+        — hand these to run_model() on a background thread (the SLOW half — the Claude call
+        can take minutes and MUST NOT hold an HTTP connection open, or Railway's ~300s edge
+        proxy timeout kills it).
     """
     purpose_cfg = cfgmod.load_purpose(purpose_id, uploaded_path=uploaded_purpose_path)
     # client_slug from ingested data wins unless the caller explicitly supplied one.
@@ -112,20 +119,45 @@ def analyze(*, rows, source_ids, client_slug, diagnostics, purpose_id, client_sl
         "ingest_diagnostics": diagnostics,
     }
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-
-    if not api_key:
+    if not os.environ.get("ANTHROPIC_API_KEY"):
         return {
-            "status": "not_enabled",
-            "reason": "no ANTHROPIC_API_KEY",
-            "assembled_prompt": assembled_prompt,
-            "provenance": provenance,
-            "purpose_resolved": purpose_cfg["fields"] if purpose_cfg else None,
-            "client_resolved": client_cfg["fields"] if client_cfg else None,
-            **run_metadata,
+            "terminal": True,
+            "result": {
+                "status": "not_enabled",
+                "reason": "no ANTHROPIC_API_KEY",
+                "assembled_prompt": assembled_prompt,
+                "provenance": provenance,
+                "purpose_resolved": purpose_cfg["fields"] if purpose_cfg else None,
+                "client_resolved": client_cfg["fields"] if client_cfg else None,
+                **run_metadata,
+            },
         }
 
-    return _call_model(assembled_prompt, provenance, purpose_id, run_metadata)
+    return {
+        "terminal": False,
+        "assembled_prompt": assembled_prompt,
+        "provenance": provenance,
+        "purpose_id": purpose_id,
+        "run_metadata": run_metadata,
+    }
+
+
+def run_model(prep):
+    """The SLOW half — the live Claude call. Runs on a background thread (see sentiment/jobs.py).
+    Takes the dict returned by prepare() when terminal is False."""
+    return _call_model(
+        prep["assembled_prompt"], prep["provenance"], prep["purpose_id"], prep["run_metadata"]
+    )
+
+
+def analyze(**kwargs):
+    """Synchronous convenience wrapper (used by local tests): prepare() then, if needed,
+    run_model() inline. The Flask route does NOT use this — it splits the two halves across
+    the request boundary so the slow call runs off-request."""
+    prep = prepare(**kwargs)
+    if prep["terminal"]:
+        return prep["result"]
+    return run_model(prep)
 
 
 def _split_report_and_summary(raw_text):

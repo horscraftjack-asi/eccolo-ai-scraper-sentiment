@@ -134,6 +134,53 @@ export default function Analyzer({ scrapeResult, onBack }: AnalyzerProps) {
 
   const selectedPurpose = purposes.find((p) => p.purpose_id === purposeId);
 
+  // Drop into the "done" state with a full result payload (the shape the result panel renders).
+  const finishWith = (data: AnalyzeResult) => {
+    clearTimers();
+    setStepIndex(3);
+    timersRef.current.push(
+      setTimeout(() => {
+        setResult(data);
+        setStatus("done");
+      }, 300)
+    );
+  };
+
+  const fail = (e: unknown) => {
+    clearTimers();
+    setErrorMsg(
+      e instanceof Error ? e.message : "Could not reach the server. Is it running?"
+    );
+    setStatus("error");
+  };
+
+  // The real analysis runs on a background thread server-side (Railway's edge proxy kills any
+  // single request at ~300s, and a full report runs longer). Poll for completion instead of
+  // holding one long request open. Each poll is sub-second, so it never trips the edge timeout.
+  const pollJob = (jobId: string) => {
+    const poll = async () => {
+      try {
+        const res = await fetch(`${BACKEND_URL}/analyze/status/${jobId}`);
+        const ct = res.headers.get("content-type") ?? "";
+        if (!ct.includes("application/json")) {
+          throw new Error(`Status check did not return JSON (Content-Type: "${ct}").`);
+        }
+        const data = await res.json();
+        if (data.status === "running") return; // keep polling
+        if (data.status === "error") {
+          fail(new Error(data.error || "Analysis failed."));
+        } else {
+          finishWith(data as AnalyzeResult); // "ok" — full report shape
+        }
+      } catch (e) {
+        fail(e);
+      }
+    };
+    const id = setInterval(poll, 3000);
+    timersRef.current.push(id as unknown as ReturnType<typeof setTimeout>);
+    poll(); // fire once immediately rather than waiting the first 3s
+  };
+
   const run = async () => {
     if (!purposeId) return;
     if (!scrapeResult && !uploadFile) return;
@@ -186,25 +233,25 @@ export default function Analyzer({ scrapeResult, onBack }: AnalyzerProps) {
         );
       }
       const data = await res.json();
-      // 503 "not_enabled" is a valid, expected result while the analyzer is stubbed —
-      // not a fetch failure. Any other non-OK status is a real error.
-      if (!res.ok && res.status !== 503) {
+
+      // 503 "not_enabled": the stub is terminal (no model call), render it straight away.
+      if (res.status === 503) {
+        finishWith(data as AnalyzeResult);
+        return;
+      }
+      // 202 "running": the model call is happening on a background thread — poll for it.
+      if (res.status === 202 && data.job_id) {
+        pollJob(data.job_id);
+        return;
+      }
+      // Any other non-OK is a real error.
+      if (!res.ok) {
         throw new Error(data.error ?? `Backend returned ${res.status} from ${url}`);
       }
-      clearTimers();
-      setStepIndex(3);
-      timersRef.current.push(
-        setTimeout(() => {
-          setResult(data as AnalyzeResult);
-          setStatus("done");
-        }, 300)
-      );
+      // Fallback: a direct 200 result (older/sync backend) — render it.
+      finishWith(data as AnalyzeResult);
     } catch (e) {
-      clearTimers();
-      setErrorMsg(
-        e instanceof Error ? e.message : "Could not reach the server. Is it running?"
-      );
-      setStatus("error");
+      fail(e);
     }
   };
 

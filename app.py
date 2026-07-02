@@ -9,7 +9,12 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 from sentiment import config as sentiment_config
+from sentiment import jobs as sentiment_jobs
 from sentiment import run as sentiment_run
+
+
+def _utcnow():
+    return datetime.now(timezone.utc).timestamp()
 
 # === SETUP ===
 # Key is read from an environment variable — never hardcoded.
@@ -265,8 +270,9 @@ def analyze():
     except Exception as e:
         return jsonify({"error": f"Ingest failed: {e}"}), 422
 
+    # The fast half (config resolution + prompt assembly) runs inline — sub-second.
     try:
-        result = sentiment_run.analyze(
+        prep = sentiment_run.prepare(
             rows=rows,
             source_ids=source_ids,
             client_slug=client_slug,
@@ -280,21 +286,36 @@ def analyze():
             uploaded_client_path=uploaded_client_path,
         )
     except Exception as e:
-        # Anything from the live model call (network error, bad/misconfigured API key,
-        # rate limit, timeout, etc.) must still come back as JSON — an uncaught exception
-        # here falls through to Flask's default HTML error page, which the frontend can't
-        # parse and reports as a bare "Backend did not return JSON".
-        app.logger.exception("/analyze failed during sentiment_run.analyze()")
-        return jsonify({"error": f"Analysis failed: {e}"}), 502
+        app.logger.exception("/analyze failed during prepare()")
+        return jsonify({"error": f"Analysis prep failed: {e}"}), 502
     finally:
         for p in (uploaded_purpose_path, uploaded_client_path):
             if p:
                 os.unlink(p)
 
-    if result["status"] == "not_enabled":
-        return jsonify(result), 503
+    # No API key → the "not_enabled" stub is terminal and needs no model call. Return it
+    # synchronously exactly as before (503 + the assembled prompt + diagnostics).
+    if prep["terminal"]:
+        return jsonify(prep["result"]), 503
 
-    return jsonify(result)
+    # Key present → the slow Claude call would blow past Railway's ~300s edge timeout if held
+    # on this request. Start it on a background thread and hand the client a job_id to poll.
+    job_id = sentiment_jobs.create_job(_utcnow())
+    sentiment_jobs.run_in_thread(job_id, lambda: sentiment_run.run_model(prep), _utcnow)
+    return jsonify({"status": "running", "job_id": job_id}), 202
+
+
+@app.route("/analyze/status/<job_id>", methods=["GET"])
+def analyze_status(job_id):
+    job = sentiment_jobs.get_job(job_id)
+    if job is None:
+        return jsonify({"error": "Unknown or expired job_id.", "status": "not_found"}), 404
+    if job["status"] == "running":
+        return jsonify({"status": "running"}), 200
+    if job["status"] == "error":
+        return jsonify({"status": "error", "error": job["error"]}), 200
+    # done — return the exact result shape the frontend already renders.
+    return jsonify(job["result"]), 200
 
 
 @app.route("/health", methods=["GET"])
