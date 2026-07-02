@@ -176,47 +176,37 @@ def _split_report_and_summary(raw_text):
         return report.strip(), None
 
 
-MAX_CONTINUATIONS = 3
-
-
-def _generate_with_continuation(client, model, max_tokens, prompt_text):
-    """
-    Calls the model, and if it stops on max_tokens (a real course-dev report can run long),
-    continues via assistant-prefill — resending the partial output as the trailing assistant
-    turn so the model picks up exactly where it left off — and stitches the pieces together.
-    Never silently returns a truncated report; if continuations run out, callers get a
-    `truncated=True` flag instead of a silent cut-off.
-    """
-    messages = [{"role": "user", "content": prompt_text}]
-    full_text = ""
-    continuations = 0
-
-    while True:
-        response = client.messages.create(model=model, max_tokens=max_tokens, messages=messages)
-        piece = "".join(block.text for block in response.content if hasattr(block, "text"))
-        full_text += piece
-
-        if response.stop_reason != "max_tokens" or continuations >= MAX_CONTINUATIONS:
-            return full_text, response.stop_reason == "max_tokens", continuations
-
-        continuations += 1
-        messages = [
-            {"role": "user", "content": prompt_text},
-            {"role": "assistant", "content": full_text},
-        ]
+# Default to a current 1M-context Sonnet. The previous default (claude-sonnet-4-5) has only a
+# 200K context window, which a large comment set overflows ("prompt is too long: N > 200000").
+# All current Sonnet/Opus models are 1M-context. Override per-run with SENTIMENT_MODEL (e.g.
+# claude-opus-4-8 for high-stakes runs). See sentiment-analyzer-BUILD-HANDOFF.md §8.
+DEFAULT_MODEL = "claude-sonnet-5"
 
 
 def _call_model(assembled_prompt, provenance, purpose_id, run_metadata):
     """The live path — dark until ANTHROPIC_API_KEY exists. Mirrors the analytics /insights stub."""
     import anthropic
 
-    model = os.environ.get("SENTIMENT_MODEL", "claude-sonnet-4-5")
-    max_tokens = int(os.environ.get("SENTIMENT_MAX_TOKENS", "16000"))
+    model = os.environ.get("SENTIMENT_MODEL", DEFAULT_MODEL)
+    max_tokens = int(os.environ.get("SENTIMENT_MAX_TOKENS", "32000"))
 
     client = anthropic.Anthropic()
-    raw_text, truncated, continuations = _generate_with_continuation(
-        client, model, max_tokens, assembled_prompt
-    )
+    # Stream: a full report is long, and the SDK refuses (or times out on) large non-streaming
+    # requests. Thinking is disabled to keep behaviour matching the tuned v2 output, which was
+    # produced with no thinking — flipping it on is a separate quality experiment, not this fix.
+    # (We deliberately do NOT use assistant-prefill continuation: it 400s on all current models.
+    #  A 32K output budget comfortably fits a 12-section report + summary.json; if it ever
+    #  truncates we flag it rather than stitch.)
+    with client.messages.stream(
+        model=model,
+        max_tokens=max_tokens,
+        thinking={"type": "disabled"},
+        messages=[{"role": "user", "content": assembled_prompt}],
+    ) as stream:
+        response = stream.get_final_message()
+
+    raw_text = "".join(block.text for block in response.content if hasattr(block, "text"))
+    truncated = response.stop_reason == "max_tokens"
     report_markdown, summary_json = _split_report_and_summary(raw_text)
 
     result = {
@@ -226,7 +216,8 @@ def _call_model(assembled_prompt, provenance, purpose_id, run_metadata):
         "purpose": purpose_id,
         "summary_json": summary_json,
         "truncated": truncated,
-        "continuations": continuations,
+        "continuations": 0,
+        "model": model,
         **run_metadata,
     }
     if summary_json is not None:
