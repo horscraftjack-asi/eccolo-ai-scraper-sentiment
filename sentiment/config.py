@@ -89,5 +89,7 @@ def load_client(client_slug, uploaded_path=None):
 
 
 def load_engine_core():
-    with open(os.path.join(ENGINE_DIR, "SKILL.md"), "r", encoding="utf-8") as f:
+    # CORE.md is the API-mode engine core (Steps 1 & 7 reframed for a single API response).
+    # SKILL.md stays untouched as the installable Claude-skill distribution / fallback.
+    with open(os.path.join(ENGINE_DIR, "CORE.md"), "r", encoding="utf-8") as f:
         return f.read()

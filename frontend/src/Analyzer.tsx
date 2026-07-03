@@ -305,10 +305,10 @@ export default function Analyzer({ scrapeResult, onBack }: AnalyzerProps) {
     "bg-[#0A0D12] border border-[#2c3540] rounded-[10px] text-[#E7EBF1] caret-[#B8F24A] font-['JetBrains_Mono']";
 
   const breadcrumb = useMemo(() => {
-    if (status === "loading") return "eccolo — analyzing…";
-    if (status === "done") return "eccolo — ~/analyze · done";
-    if (status === "error") return "eccolo — error";
-    return "eccolo — ~/analyze";
+    if (status === "loading") return "ziggurat — analyzing…";
+    if (status === "done") return "ziggurat — ~/analyze · done";
+    if (status === "error") return "ziggurat — error";
+    return "ziggurat — ~/analyze";
   }, [status]);
 
   return (

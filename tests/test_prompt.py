@@ -48,6 +48,22 @@ def test_prompt_contains_nine_category_taxonomy(monkeypatch):
         assert category in prompt, f"taxonomy category '{category}' missing from prompt"
 
 
+def test_prompt_has_no_in_claude_skill_era_instructions(monkeypatch):
+    """Phase 3: the assembled prompt drives only API-mode behaviour. None of the skill-era
+    'run this bash script / read those files / save this file' remnants may survive."""
+    prompt = _assembled_prompt(monkeypatch)
+    assert "```bash" not in prompt
+    assert "scripts/sentiment_ingest.py" not in prompt
+    assert "sentiment_ingest.py" not in prompt
+    assert "validate_summary.py" not in prompt
+    assert "Save as" not in prompt
+    # still API-mode complete: schema + taxonomy + single-response emit contract
+    assert "===SUMMARY_JSON===" in prompt
+    assert "question_clusters" in prompt
+    for category in NINE_CATEGORIES:
+        assert category in prompt
+
+
 def test_prompt_sections_in_ratified_order(monkeypatch):
     prompt = _assembled_prompt(monkeypatch)
     # NB: "## Run scope" also appears inside the engine core (SKILL.md has its own run-scope

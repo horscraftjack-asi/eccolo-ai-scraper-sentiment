@@ -47,22 +47,21 @@ def build_prompt(purpose_cfg, client_cfg, normalised_rows, provenance, scope,
     """
     sections = [config.load_engine_core()]
 
+    # The engine core (CORE.md) now carries the ingest-already-ran and emit-both-outputs
+    # instructions. This section keeps only what the core can't: the literal §4 schema in front of
+    # the model (a real run improvised a nonconforming shape when it was only referenced), plus the
+    # single-API-response framing tying it to this run.
     sections.append(
         "\n---\n\n"
-        "## Run context — this invocation\n\n"
-        "Ingest has already run (deterministically, outside this prompt). The comments below "
-        "are already normalised to the canonical §3.1 row shape and the provenance block is "
-        "already assembled — do not re-run `sentiment_ingest.py` or re-derive `source_id` / "
-        "`client_slug`; use the values given here verbatim in the `summary.json` you emit.\n\n"
-        "This is a single API response, not a Claude Code session with file-writing tools — "
-        "emit both Step 7 outputs in this one message: first the full Markdown report, then a "
-        "line containing only `===SUMMARY_JSON===`, then a fenced ```json code block containing "
-        "the `summary.json` object. Match this shape **exactly** — every array item's identifying "
-        "field is named `name` (not `theme`/`gap`/`pain_point`/etc), and `provenance` is a nested "
-        "object copied verbatim from the block given below, not flattened into top-level keys:\n\n"
+        "## summary.json — exact §4 schema for this run\n\n"
+        "Single API response: emit the Markdown report, then a line containing only "
+        "`===SUMMARY_JSON===`, then one fenced ```json block matching this shape **exactly** — "
+        "every array item's identifying field is named `name` (not `theme`/`gap`/`pain_point`/etc), "
+        "and `provenance` is a nested object copied verbatim from the block given below, not "
+        "flattened into top-level keys. Nothing after the closing code fence:\n\n"
         f"{SUMMARY_JSON_SCHEMA}\n\n"
         "A purpose config may define `summary_json_extensions` — add those as additional keys "
-        "alongside the ones above, never in place of them. Nothing after the closing code fence."
+        "alongside the ones above, never in place of them."
     )
 
     if purpose_cfg:
