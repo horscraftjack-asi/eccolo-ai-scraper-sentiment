@@ -1,7 +1,13 @@
-flask
-flask-cors
-requests
-gunicorn
-pyyaml
-anthropic
-python-dotenv
+# Pinned deliberately. These were previously unpinned, which let Werkzeug silently
+# upgrade to 3.1 in a rebuild — its new 500 KB form-field default (max_form_memory_size)
+# started returning 413 (HTML) on large /analyze payloads. Pin so prod is reproducible
+# and a dependency can't shift behaviour under us again. werkzeug is pinned explicitly
+# (not just as a Flask transitive) because it's the one that bit us.
+flask==3.1.3
+werkzeug==3.1.8
+flask-cors==6.0.5
+requests==2.34.2
+gunicorn==26.0.0
+pyyaml==6.0.3
+anthropic==0.115.0
+python-dotenv==1.2.2

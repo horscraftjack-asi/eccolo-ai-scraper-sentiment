@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from werkzeug.exceptions import RequestEntityTooLarge
 
 from sentiment import config as sentiment_config
 from sentiment import jobs as sentiment_jobs
@@ -26,6 +27,18 @@ YOUTUBE_API_URL = "https://www.googleapis.com/youtube/v3"
 TOOL_VERSION = "1.1.0"
 
 app = Flask(__name__)
+
+# Werkzeug 3.1 introduced a 500 KB default cap on *non-file* form fields
+# (max_form_memory_size). The /analyze flywheel path posts the entire scrape_result
+# as a single form field, so any reasonably large comment set blows past 500 KB and
+# Werkzeug rejects the request with a 413 (an HTML error page) BEFORE the handler runs
+# — which the frontend surfaces as "Backend did not return JSON". Raise the cap
+# generously for large comment sets; keep MAX_CONTENT_LENGTH as an overall abuse
+# backstop. (Requirements pin neither Flask nor Werkzeug, so this default arrived via
+# a silent dependency upgrade — see requirements.txt.)
+_MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100 MB
+app.config["MAX_FORM_MEMORY_SIZE"] = _MAX_UPLOAD_BYTES
+app.config["MAX_CONTENT_LENGTH"] = _MAX_UPLOAD_BYTES
 
 # Lock CORS to the frontend's origin in production. Set FRONTEND_ORIGIN to your
 # deployed frontend URL (e.g. https://yt-frontend.up.railway.app). You can pass
@@ -316,6 +329,17 @@ def analyze_status(job_id):
         return jsonify({"status": "error", "error": job["error"]}), 200
     # done — return the exact result shape the frontend already renders.
     return jsonify(job["result"]), 200
+
+
+@app.errorhandler(RequestEntityTooLarge)
+def handle_too_large(e):
+    # Return JSON (not Werkzeug's default HTML) so the frontend can show a real message
+    # instead of "Backend did not return JSON" if a payload ever exceeds the cap above.
+    limit_mb = _MAX_UPLOAD_BYTES // (1024 * 1024)
+    return jsonify({
+        "error": f"That comment set is too large to submit in one request (limit {limit_mb} MB). "
+                 "Try a narrower scrape or upload the comments as a file."
+    }), 413
 
 
 @app.route("/health", methods=["GET"])
